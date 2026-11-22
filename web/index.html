@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel</title>
+<style>
+  :root { --bg:#0f1218; --panel:#171b23; --line:#262c38; --text:#e6e8ec; --muted:#8a93a3;
+          --allow:#3fb68b; --review:#e0a63a; --block:#e5534b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:16px 24px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:18px; letter-spacing:.5px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); }
+  .dot.live { background:var(--allow); box-shadow:0 0 8px var(--allow); }
+  header .sub { color:var(--muted); font-size:13px; }
+  main { padding:20px 24px; max-width:1200px; margin:0 auto; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .card .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.6px; }
+  .card .value { font-size:26px; font-weight:600; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .allow { color:var(--allow); } .review { color:var(--review); } .block { color:var(--block); }
+  h2 { font-size:14px; color:var(--muted); font-weight:500; margin:0 0 10px; }
+  #feed { display:flex; flex-direction:column; gap:8px; }
+  .alert { background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--review);
+           border-radius:8px; padding:10px 14px; display:grid; grid-template-columns:90px 1fr auto; gap:4px 14px; align-items:center;
+           animation:in .35s ease; }
+  .alert.BLOCK { border-left-color:var(--block); }
+  .badge { font-weight:700; font-size:12px; letter-spacing:.5px; }
+  .meta { font-variant-numeric:tabular-nums; }
+  .meta .amt { font-weight:600; }
+  .meta .dim, .reasons { color:var(--muted); }
+  .score { font-size:20px; font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
+  .reasons { grid-column:2 / 4; font-size:12.5px; }
+  .empty { color:var(--muted); padding:24px; text-align:center; border:1px dashed var(--line); border-radius:8px; }
+  @keyframes in { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+  @media (max-width:600px) { .alert { grid-template-columns:70px 1fr auto; } main, header { padding-left:16px; padding-right:16px; } }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <h1>SENTINEL</h1>
+  <span class="sub">real-time fraud detection engine</span>
+</header>
+<main>
+  <section class="cards">
+    <div class="card"><div class="label">Processed</div><div class="value" id="processed">0</div></div>
+    <div class="card"><div class="label">Throughput</div><div class="value" id="tps">0</div></div>
+    <div class="card"><div class="label">Allowed</div><div class="value allow" id="allowed">0</div></div>
+    <div class="card"><div class="label">Review</div><div class="value review" id="reviewed">0</div></div>
+    <div class="card"><div class="label">Blocked</div><div class="value block" id="blocked">0</div></div>
+    <div class="card"><div class="label">Fraud caught</div><div class="value" id="caught">–</div></div>
+    <div class="card"><div class="label">False alarms</div><div class="value" id="false">0</div></div>
+    <div class="card"><div class="label">Avg latency</div><div class="value" id="lat">–</div></div>
+  </section>
+  <h2>Live alerts</h2>
+  <div id="feed"><div class="empty" id="empty">Waiting for suspicious transactions…</div></div>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  const fmt = n => n.toLocaleString('en-IN');
+  const inr = n => '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const feed = $('feed');
+
+  const es = new EventSource('/events');
+  es.onopen = () => $('dot').classList.add('live');
+  es.onerror = () => $('dot').classList.remove('live');
+
+  es.addEventListener('stats', e => {
+    const s = JSON.parse(e.data);
+    $('processed').textContent = fmt(s.processed);
+    $('tps').textContent = s.tps.toFixed(1) + '/s';
+    $('allowed').textContent = fmt(s.allowed);
+    $('reviewed').textContent = fmt(s.reviewed);
+    $('blocked').textContent = fmt(s.blocked);
+    $('caught').textContent = s.plantedTotal ? Math.round(100 * s.plantedCaught / s.plantedTotal) + '%' : '–';
+    $('false').textContent = fmt(s.falseAlarms);
+    const us = s.avgMs * 1000; // too fast for the OS clock on some machines, so show "< 1 µs"
+    $('lat').textContent = us < 1 ? '< 1 µs' : us.toFixed(1) + ' µs';
+  });
+
+  es.addEventListener('alert', e => {
+    const a = JSON.parse(e.data);
+    $('empty')?.remove();
+    const el = document.createElement('div');
+    el.className = 'alert ' + a.Decision;
+    el.innerHTML = `
+      <span class="badge ${a.Decision.toLowerCase()}">${a.Decision}</span>
+      <span class="meta"><span class="amt">${inr(a.Amount)}</span> · ${esc(a.Merchant)} · ${esc(a.City)}
+        <span class="dim">· ${esc(a.Card)} · ${esc(a.ID)} · ${a.Time}</span></span>
+      <span class="score ${a.Decision.toLowerCase()}">${a.Score}</span>
+      <span class="reasons">${a.Reasons.map(esc).join('  ·  ')}</span>`;
+    feed.prepend(el);
+    while (feed.children.length > 40) feed.lastChild.remove();
+  });
+</script>
+</body>
+</html>
