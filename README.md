@@ -8,6 +8,8 @@ Sentinel watches a live stream of card transactions, scores every payment agains
 ![Tests](https://img.shields.io/badge/tests-23%20passing-3fb68b)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-blue)
 
+![Sentinel live dashboard](docs/dashboard.png)
+
 ---
 
 ## ✨ Highlights
