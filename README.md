@@ -24,8 +24,8 @@ Sentinel watches a live stream of card transactions, scores every payment agains
 ## 🚀 Quick start
 
 ```bash
-git clone https://github.com/<your-username>/sentinel.git
-cd sentinel
+git clone https://github.com/Stark8991/Sentinel.git
+cd Sentinel
 go run .
 ```
 
